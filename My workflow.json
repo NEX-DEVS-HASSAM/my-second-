@@ -1,0 +1,560 @@
+{
+  "name": "My workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "shopify-webhook",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "9d42d5c3-4826-4304-904e-4fe9c23e2591",
+      "name": "Shopify Purchase Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        -340,
+        40
+      ],
+      "webhookId": "shopify-purchase-hook"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "whatsapp-webhook",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "9bbe4898-e210-4628-a290-5881dd315906",
+      "name": "WhatsApp Support Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        -340,
+        340
+      ],
+      "webhookId": "whatsapp-support-hook"
+    },
+    {
+      "parameters": {},
+      "id": "92ee44c0-0769-4e68-b572-6b76662189bd",
+      "name": "Schedule Competitor Scraping",
+      "type": "n8n-nodes-base.schedule",
+      "typeVersion": 1,
+      "position": [
+        -340,
+        640
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.line_items[0].product_type}}",
+              "operation": "contains",
+              "value2": "watch"
+            }
+          ]
+        }
+      },
+      "id": "cc943836-c0fd-4094-a12f-f478468a5ae9",
+      "name": "Filter Watch Purchases",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        -140,
+        40
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract customer and purchase details\nconst order = $input.first().json;\n\nreturn {\n  customer: {\n    email: order.customer.email,\n    firstName: order.customer.first_name,\n    lastName: order.customer.last_name,\n    id: order.customer.id\n  },\n  purchase: {\n    orderId: order.id,\n    orderNumber: order.order_number,\n    totalPrice: order.total_price,\n    currency: order.currency,\n    purchasedWatch: {\n      title: order.line_items[0].title,\n      brand: order.line_items[0].vendor,\n      price: order.line_items[0].price,\n      variant: order.line_items[0].variant_title\n    }\n  },\n  timestamp: new Date().toISOString()\n};"
+      },
+      "id": "bc98ee1f-adde-41d2-bd1f-a06c835853e3",
+      "name": "Extract Customer Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        60,
+        -20
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "product",
+        "operation": "getAll",
+        "returnAll": true,
+        "additionalFields": {}
+      },
+      "id": "4832256b-3da9-41bb-8e3e-25a741cfb3c4",
+      "name": "Get Watch Products",
+      "type": "n8n-nodes-base.shopify",
+      "typeVersion": 1,
+      "position": [
+        260,
+        -20
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "8935c305-6617-4560-95f3-274f8bd30e58",
+      "name": "Generate Promotional Email",
+      "type": "n8n-nodes-base.anthropic",
+      "typeVersion": 1,
+      "position": [
+        460,
+        -20
+      ],
+      "credentials": {}
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse the AI response and prepare email data\nconst aiResponse = $input.first().json.response;\nlet emailData;\n\ntry {\n  // Extract JSON from AI response\n  const jsonMatch = aiResponse.match(/\\{[\\s\\S]*\\}/);\n  emailData = JSON.parse(jsonMatch[0]);\n} catch (error) {\n  // Fallback if JSON parsing fails\n  emailData = {\n    subject: \"Exclusive Watch Collection - Just for You!\",\n    htmlContent: aiResponse,\n    textContent: aiResponse.replace(/<[^>]*>/g, '')\n  };\n}\n\nconst customerData = $('Extract Customer Data').first().json;\n\nreturn {\n  to: customerData.customer.email,\n  subject: emailData.subject,\n  html: emailData.htmlContent,\n  text: emailData.textContent,\n  customerName: customerData.customer.firstName,\n  orderId: customerData.purchase.orderId\n};"
+      },
+      "id": "badddee3-a9bd-4697-9fd3-62d1d54e543e",
+      "name": "Prepare Email Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        -20
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "noreply@yourwatchstore.com",
+        "toEmail": "={{$json.to}}",
+        "subject": "={{$json.subject}}",
+        "emailFormat": "html",
+        "html": "={{$json.html}}",
+        "options": {}
+      },
+      "id": "40cf6d26-984f-4100-baf1-a2756911dff9",
+      "name": "Send Promotional Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2,
+      "position": [
+        860,
+        -20
+      ],
+      "webhookId": "ab6ecc89-c1d8-4105-b5c8-14b4c88245d3"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract WhatsApp message details\nconst webhookData = $input.first().json;\n\nreturn {\n  from: webhookData.messages[0].from,\n  message: webhookData.messages[0].text.body,\n  messageId: webhookData.messages[0].id,\n  timestamp: webhookData.messages[0].timestamp,\n  customerPhone: webhookData.messages[0].from\n};"
+      },
+      "id": "6f011d10-b36e-4fab-b1fd-26dd5a9dab12",
+      "name": "Extract WhatsApp Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -140,
+        340
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "132fa866-87bb-4a1e-b5c6-8c2ffd6e4a08",
+      "name": "Generate Support Response",
+      "type": "n8n-nodes-base.anthropic",
+      "typeVersion": 1,
+      "position": [
+        60,
+        340
+      ],
+      "credentials": {}
+    },
+    {
+      "parameters": {
+        "url": "https://graph.facebook.com/v18.0/YOUR_PHONE_NUMBER_ID/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {}
+          ]
+        },
+        "options": {}
+      },
+      "id": "06d4174b-d481-4294-9556-e7bdd47f740e",
+      "name": "Send WhatsApp Response",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        260,
+        340
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://www.competitorwatch1.com/watches",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true
+            }
+          }
+        }
+      },
+      "id": "c313f198-db55-44b0-aec9-5e04c5e20d57",
+      "name": "Scrape Competitor 1",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        -140,
+        580
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://www.competitorwatch2.com/collection",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true
+            }
+          }
+        }
+      },
+      "id": "2fb555c4-620c-4da1-80c1-1db3e7a35906",
+      "name": "Scrape Competitor 2",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        -140,
+        680
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract watch data from scraped HTML\nconst scraped1 = $('Scrape Competitor 1').first().json.body;\nconst scraped2 = $('Scrape Competitor 2').first().json.body;\n\n// Simple regex-based extraction (in production, use proper HTML parsing)\nfunction extractWatches(html) {\n  const watches = [];\n  \n  // Look for common watch-related patterns\n  const titlePattern = /<h[1-6][^>]*>([^<]*watch[^<]*)<\\/h[1-6]>/gi;\n  const pricePattern = /\\$([0-9,]+(?:\\.[0-9]{2})?)/g;\n  const brandPattern = /(?:rolex|omega|seiko|casio|tissot|hamilton|citizen)/gi;\n  \n  let titleMatch;\n  while ((titleMatch = titlePattern.exec(html)) !== null) {\n    watches.push({\n      title: titleMatch[1].trim(),\n      source: 'competitor'\n    });\n  }\n  \n  return watches.slice(0, 10); // Limit to 10 watches\n}\n\nconst competitor1Watches = extractWatches(scraped1);\nconst competitor2Watches = extractWatches(scraped2);\n\nreturn {\n  competitorData: {\n    competitor1: competitor1Watches,\n    competitor2: competitor2Watches,\n    totalWatches: competitor1Watches.length + competitor2Watches.length,\n    scrapedAt: new Date().toISOString()\n  }\n};"
+      },
+      "id": "280e73f2-a2fe-4771-9042-37b7f82d439e",
+      "name": "Extract Competitor Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        60,
+        640
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "cc0f77b9-2fad-4f1c-ae88-49b003bb3b21",
+      "name": "Generate Ad Content",
+      "type": "n8n-nodes-base.anthropic",
+      "typeVersion": 1,
+      "position": [
+        260,
+        640
+      ],
+      "credentials": {}
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse AI response and format for APIs\nconst aiResponse = $input.first().json.response;\nlet campaigns;\n\ntry {\n  // Extract JSON from AI response\n  const jsonMatch = aiResponse.match(/\\[[\\s\\S]*\\]/);\n  campaigns = JSON.parse(jsonMatch[0]);\n} catch (error) {\n  console.error('Failed to parse AI response:', error);\n  campaigns = [];\n}\n\n// Format for Google Ads API\nconst googleAdsData = campaigns.map((campaign, index) => ({\n  campaignName: campaign.campaignName,\n  adGroupName: `${campaign.campaignName} - Ad Group`,\n  headlines: campaign.googleAds.headlines,\n  descriptions: campaign.googleAds.descriptions,\n  keywords: campaign.googleAds.keywords,\n  finalUrl: campaign.googleAds.finalUrl,\n  budget: 50.00, // Daily budget in USD\n  bidStrategy: 'TARGET_CPA',\n  targetCpa: 25.00\n}));\n\n// Format for Meta Ads API\nconst metaAdsData = campaigns.map((campaign, index) => ({\n  campaignName: campaign.campaignName,\n  adSetName: `${campaign.campaignName} - Ad Set`,\n  adName: `${campaign.campaignName} - Ad`,\n  primaryText: campaign.metaAds.primaryText,\n  headline: campaign.metaAds.headline,\n  description: campaign.metaAds.description,\n  callToAction: campaign.metaAds.callToAction,\n  destinationUrl: campaign.metaAds.destinationUrl,\n  dailyBudget: 50.00,\n  bidStrategy: 'LOWEST_COST_WITHOUT_CAP',\n  targeting: {\n    ageMin: 25,\n    ageMax: 65,\n    interests: ['Luxury goods', 'Watches', 'Fashion accessories']\n  }\n}));\n\nreturn {\n  googleAds: googleAdsData,\n  metaAds: metaAdsData,\n  timestamp: new Date().toISOString()\n};"
+      },
+      "id": "ee797d44-84a1-4914-95d1-133b7e08bf34",
+      "name": "Format Ad Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        460,
+        640
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://googleads.googleapis.com/v14/customers/YOUR_CUSTOMER_ID/campaigns:mutate",
+        "authentication": "oAuth2Api",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {}
+          ]
+        },
+        "options": {}
+      },
+      "id": "53523978-31d0-41af-a606-3ccaf038a86e",
+      "name": "Upload Google Ads",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        660,
+        580
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://graph.facebook.com/v18.0/act_YOUR_AD_ACCOUNT_ID/campaigns",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {}
+          ]
+        },
+        "options": {}
+      },
+      "id": "35b05ba8-3fca-40ff-bc00-4dabed063feb",
+      "name": "Upload Meta Ads",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        660,
+        680
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"status\": \"success\", \"message\": \"Promotional email sent\", \"orderId\": $('Extract Customer Data').first().json.purchase.orderId } }}",
+        "options": {}
+      },
+      "id": "d4f33ea7-2665-4938-8fb1-dd0af8bfbb63",
+      "name": "Shopify Webhook Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1060,
+        -20
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"status\": \"success\", \"message\": \"Support response sent\" } }}",
+        "options": {}
+      },
+      "id": "fa9a2ef9-3851-45ea-9014-04f61f9128cc",
+      "name": "WhatsApp Webhook Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        460,
+        340
+      ]
+    },
+    {
+      "parameters": {
+        "schema": {
+          "__rl": true,
+          "mode": "list",
+          "value": "public"
+        },
+        "table": "email_campaigns",
+        "columns": "customer_email, subject, sent_at, order_id, campaign_type",
+        "options": {}
+      },
+      "id": "ad76ced5-9aab-4cf1-b168-d7f9a197586e",
+      "name": "Log Email Campaign",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        880,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "schema": {
+          "__rl": true,
+          "mode": "list",
+          "value": "public"
+        },
+        "table": "whatsapp_interactions",
+        "columns": "phone_number, message_received, response_sent, handled_at",
+        "options": {}
+      },
+      "id": "c90ea998-cc04-431e-9276-2b19003b1262",
+      "name": "Log WhatsApp Interaction",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        260,
+        440
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Shopify Purchase Webhook": {
+      "main": [
+        [
+          {
+            "node": "Filter Watch Purchases",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WhatsApp Support Webhook": {
+      "main": [
+        [
+          {
+            "node": "Extract WhatsApp Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Watch Purchases": {
+      "main": [
+        [
+          {
+            "node": "Extract Customer Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Customer Data": {
+      "main": [
+        [
+          {
+            "node": "Get Watch Products",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Email Data": {
+      "main": [
+        [
+          {
+            "node": "Send Promotional Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Promotional Email": {
+      "main": [
+        [
+          {
+            "node": "Log Email Campaign",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Shopify Webhook Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send WhatsApp Response": {
+      "main": [
+        [
+          {
+            "node": "Log WhatsApp Interaction",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "WhatsApp Webhook Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Scrape Competitor 1": {
+      "main": [
+        [
+          {
+            "node": "Extract Competitor Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Scrape Competitor 2": {
+      "main": [
+        [
+          {
+            "node": "Extract Competitor Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Ad Data": {
+      "main": [
+        [
+          {
+            "node": "Upload Google Ads",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Upload Meta Ads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "e93feaa5-ab2e-414e-a798-cea2f5c9c011",
+  "meta": {
+    "instanceId": "d1d177ea51d38d453710030dd80539ae7341a28be5f0aed5bbc1e3a582a818fa"
+  },
+  "id": "0KN4nbukrTBNxpUl",
+  "tags": [
+    {
+      "name": "AI Automation",
+      "id": "Lsgyl8E05d6gUiF3",
+      "createdAt": "2025-07-20T22:10:33.139Z",
+      "updatedAt": "2025-07-20T22:10:33.139Z"
+    },
+    {
+      "name": "Shopify Integration",
+      "id": "Yw00sdNV5ozMlsC0",
+      "createdAt": "2025-07-20T22:10:33.159Z",
+      "updatedAt": "2025-07-20T22:10:33.159Z"
+    }
+  ]
+}
